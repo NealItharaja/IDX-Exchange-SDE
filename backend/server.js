@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const pool = require("./db/pool");
+const propertiesRouter = require("./routes/properties");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,6 +18,11 @@ app.get("/api/health", async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.use("/api/properties", propertiesRouter);
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
