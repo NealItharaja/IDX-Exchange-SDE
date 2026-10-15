@@ -5,6 +5,7 @@ const ALLOWED_PARAMS = ["city", "zipcode", "minPrice", "maxPrice", "beds", "bath
 const INTEGER = /^\d+$/;
 const DECIMAL = /^\d+(\.\d+)?$/;
 const ZIPCODE = /^\d{5}$/;
+const LISTING_ID = /^\d{1,20}$/;
 
 const RESULT_COLUMNS = `
     id,
@@ -84,12 +85,8 @@ function parsePropertyQuery(query) {
         errors.push("minPrice cannot be greater than maxPrice");
     }
 
-    const limit = query.limit === undefined
-        ? DEFAULT_LIMIT
-        : parseInteger(errors, "limit", query.limit, { min: 1, max: MAX_LIMIT });
-    const offset = query.offset === undefined
-        ? 0
-        : parseInteger(errors, "offset", query.offset);
+    const limit = query.limit === undefined ? DEFAULT_LIMIT : parseInteger(errors, "limit", query.limit, { min: 1, max: MAX_LIMIT });
+    const offset = query.offset === undefined ? 0 : parseInteger(errors, "offset", query.offset);
 
     if (errors.length > 0) return { errors };
     return { filters, limit, offset };
@@ -131,6 +128,13 @@ function buildWhereClause(filters) {
     return { where, values };
 }
 
+function parseListingId(raw) {
+    if (!LISTING_ID.test(raw)) {
+        return { error: `Listing ID must be 1 to 20 digits (got "${raw.slice(0, 50)}")` };
+    }
+    return { listingId: raw };
+}
+
 function buildPropertyQueries({ filters, limit, offset }) {
     const { where, values } = buildWhereClause(filters);
 
@@ -151,6 +155,7 @@ module.exports = {
     DEFAULT_LIMIT,
     MAX_LIMIT,
     parsePropertyQuery,
+    parseListingId,
     buildWhereClause,
     buildPropertyQueries,
 };
