@@ -24,7 +24,8 @@ const RESULT_COLUMNS = `
     YearBuilt AS yearBuilt,
     LMD_MP_Latitude AS latitude,
     LMD_MP_Longitude AS longitude,
-    PhotoCount AS photoCount
+    PhotoCount AS photoCount,
+    L_Photos AS photos
 `;
 
 function parseInteger(errors, name, raw, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
@@ -92,8 +93,7 @@ function parsePropertyQuery(query) {
     return { filters, limit, offset };
 }
 
-// Each condition is pushed together with its value so the ? placeholders and the
-// values array can never get out of order.
+// Each condition is pushed together with its value so the ? placeholders and the values array can never get out of order.
 function buildWhereClause(filters) {
     const conditions = [];
     const values = [];
