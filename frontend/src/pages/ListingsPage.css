@@ -1,0 +1,87 @@
+.listings-page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+}
+
+.listings-page__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.listings-page__header h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    color: #101828;
+}
+
+.listings-page__count {
+    margin: 0;
+    color: #667085;
+}
+
+.listings-page__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 24px;
+    transition: opacity 0.15s ease;
+}
+
+.listings-page__grid.is-loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.listings-page__status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 64px 0;
+    color: #475467;
+}
+
+.listings-page__spinner {
+    width: 22px;
+    height: 22px;
+    border: 3px solid #d0d5dd;
+    border-top-color: #1570ef;
+    border-radius: 50%;
+    animation: listings-spin 0.8s linear infinite;
+}
+
+@keyframes listings-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.listings-page__error {
+    padding: 20px 24px;
+    border: 1px solid #fda29b;
+    border-radius: 12px;
+    background: #fef3f2;
+    color: #912018;
+}
+
+.listings-page__error p {
+    margin: 0 0 12px;
+}
+
+.listings-page__error button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #d92d20;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+}
+
+.listings-page__error button:hover {
+    background: #b42318;
+}
