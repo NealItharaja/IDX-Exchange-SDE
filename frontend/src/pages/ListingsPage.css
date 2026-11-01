@@ -60,6 +60,23 @@
     }
 }
 
+.listings-page__empty {
+    padding: 48px 24px;
+    border: 1px dashed #d0d5dd;
+    border-radius: 12px;
+    background: #fff;
+    text-align: center;
+    color: #475467;
+}
+
+.listings-page__empty p {
+    margin: 0;
+}
+
+.listings-page__empty p + p {
+    margin-top: 6px;
+}
+
 .listings-page__error {
     padding: 20px 24px;
     border: 1px solid #fda29b;
