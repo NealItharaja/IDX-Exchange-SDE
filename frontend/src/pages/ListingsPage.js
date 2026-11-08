@@ -5,7 +5,7 @@ import PropertyCard from "../components/PropertyCard";
 import PropertyFilters from "../components/PropertyFilters";
 import "./ListingsPage.css";
 
-const PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50];
 
 function ListingsPage() {
     const [data, setData] = useState(null);
@@ -13,6 +13,7 @@ function ListingsPage() {
     const [error, setError] = useState(null);
     const [filters, setFilters] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
     const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
@@ -20,7 +21,7 @@ function ListingsPage() {
         setLoading(true);
         setError(null);
 
-        const params = { ...filters, limit: PAGE_SIZE, offset: (currentPage - 1) * PAGE_SIZE };
+        const params = { ...filters, limit: itemsPerPage, offset: (currentPage - 1) * itemsPerPage };
 
         fetchProperties(params, { signal: controller.signal })
             .then((body) => {
@@ -34,7 +35,7 @@ function ListingsPage() {
             });
 
         return () => controller.abort();
-    }, [filters, currentPage, reloadKey]);
+    }, [filters, currentPage, itemsPerPage, reloadKey]);
 
     const applyFilters = (nextFilters) => {
         setFilters(nextFilters);
@@ -47,8 +48,13 @@ function ListingsPage() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
+    const handleItemsPerPageChange = (event) => {
+        setItemsPerPage(Number(event.target.value));
+        setCurrentPage(1);
+    };
+
     const hasFilters = Object.keys(filters).length > 0;
-    const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
+    const totalPages = data ? Math.ceil(data.total / itemsPerPage) : 0;
     const firstShown = data ? data.offset + 1 : 0;
     const lastShown = data ? data.offset + data.results.length : 0;
 
@@ -56,12 +62,22 @@ function ListingsPage() {
         <main className="listings-page">
             <div className="listings-page__header">
                 <h1>Homes for sale</h1>
-                {data && !error && data.results.length > 0 && (
-                    <p className="listings-page__count">
-                        Showing {firstShown.toLocaleString()}-{lastShown.toLocaleString()} of{" "}
-                        {data.total.toLocaleString()} properties
-                    </p>
-                )}
+                <div className="listings-page__meta">
+                    {data && !error && data.results.length > 0 && (
+                        <p className="listings-page__count">
+                            Showing {firstShown.toLocaleString()}-{lastShown.toLocaleString()} of{" "}
+                            {data.total.toLocaleString()} properties
+                        </p>
+                    )}
+                    <label className="listings-page__per-page">
+                        Per page
+                        <select value={itemsPerPage} onChange={handleItemsPerPageChange}>
+                            {PER_PAGE_OPTIONS.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
             </div>
 
             <PropertyFilters onSearch={applyFilters} onClear={() => applyFilters({})} />

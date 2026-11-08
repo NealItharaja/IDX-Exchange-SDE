@@ -19,9 +19,33 @@
     color: #101828;
 }
 
+.listings-page__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+}
+
 .listings-page__count {
     margin: 0;
     color: #667085;
+}
+
+.listings-page__per-page {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #475467;
+    font-size: 0.9rem;
+}
+
+.listings-page__per-page select {
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    font: inherit;
 }
 
 .listings-page__grid {
