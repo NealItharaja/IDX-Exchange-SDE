@@ -16,4 +16,22 @@
     font-size: 1.2rem;
     font-weight: 700;
     color: #1570ef;
+    text-decoration: none;
+}
+
+.app__not-found {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 64px 24px;
+    text-align: center;
+    color: #475467;
+}
+
+.app__not-found h1 {
+    color: #101828;
+}
+
+.app__not-found a {
+    color: #1570ef;
+    font-weight: 600;
 }

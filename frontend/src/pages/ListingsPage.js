@@ -1,31 +1,55 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { fetchProperties } from "../api/client";
 import Pagination from "../components/Pagination";
 import PropertyCard from "../components/PropertyCard";
-import PropertyFilters from "../components/PropertyFilters";
+import PropertyFilters, { EMPTY_FILTERS, removeEmptyFilters } from "../components/PropertyFilters";
 import "./ListingsPage.css";
 
 const PER_PAGE_OPTIONS = [10, 20, 50];
+const DEFAULT_PER_PAGE = 20;
+const FILTER_KEYS = Object.keys(EMPTY_FILTERS);
+
+function readFilters(searchParams) {
+    return removeEmptyFilters(Object.fromEntries(FILTER_KEYS.map((key) => [key, searchParams.get(key)])));
+}
+
+function readPage(searchParams) {
+    const page = Number(searchParams.get("page"));
+    return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+function readPerPage(searchParams) {
+    const perPage = Number(searchParams.get("perPage"));
+    return PER_PAGE_OPTIONS.includes(perPage) ? perPage : DEFAULT_PER_PAGE;
+}
 
 function ListingsPage() {
-    const [data, setData] = useState(null);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const filters = readFilters(searchParams);
+    const filtersKey = new URLSearchParams(filters).toString();
+    const currentPage = readPage(searchParams);
+    const itemsPerPage = readPerPage(searchParams);
+    const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [filters, setFilters] = useState({});
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
     const [reloadKey, setReloadKey] = useState(0);
+    const data = result && result.filtersKey === filtersKey ? result.body : null;
 
     useEffect(() => {
         const controller = new AbortController();
         setLoading(true);
         setError(null);
 
-        const params = { ...filters, limit: itemsPerPage, offset: (currentPage - 1) * itemsPerPage };
+        const params = {
+            ...Object.fromEntries(new URLSearchParams(filtersKey)),
+            limit: itemsPerPage,
+            offset: (currentPage - 1) * itemsPerPage,
+        };
 
         fetchProperties(params, { signal: controller.signal })
             .then((body) => {
-                if (!controller.signal.aborted) setData(body);
+                if (!controller.signal.aborted) setResult({ filtersKey, body });
             })
             .catch((err) => {
                 if (err.name !== "AbortError") setError(err.message);
@@ -35,28 +59,36 @@ function ListingsPage() {
             });
 
         return () => controller.abort();
-    }, [filters, currentPage, itemsPerPage, reloadKey]);
+    }, [filtersKey, currentPage, itemsPerPage, reloadKey]);
 
+    const buildQuery = ({ nextFilters = filters, page = 1, perPage = itemsPerPage }) => {
+        const next = new URLSearchParams(nextFilters);
+        if (page > 1) next.set("page", String(page));
+        if (perPage !== DEFAULT_PER_PAGE) next.set("perPage", String(perPage));
+        return next;
+    };
+
+    const updateQuery = (changes) => setSearchParams(buildQuery(changes));
     const applyFilters = (nextFilters) => {
-        setFilters(nextFilters);
-        setCurrentPage(1);
-        setData(null);
+        const next = buildQuery({ nextFilters });
+        if (next.toString() === searchParams.toString()) setReloadKey((key) => key + 1);
+        else setSearchParams(next);
     };
 
     const handlePageChange = (page) => {
-        setCurrentPage(page);
+        updateQuery({ page });
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const handleItemsPerPageChange = (event) => {
-        setItemsPerPage(Number(event.target.value));
-        setCurrentPage(1);
+        updateQuery({ perPage: Number(event.target.value) });
     };
 
     const hasFilters = Object.keys(filters).length > 0;
     const totalPages = data ? Math.ceil(data.total / itemsPerPage) : 0;
     const firstShown = data ? data.offset + 1 : 0;
     const lastShown = data ? data.offset + data.results.length : 0;
+    const pastLastPage = data && data.results.length === 0 && data.total > 0;
 
     return (
         <main className="listings-page">
@@ -80,7 +112,13 @@ function ListingsPage() {
                 </div>
             </div>
 
-            <PropertyFilters onSearch={applyFilters} onClear={() => applyFilters({})} />
+            {/* Keyed by the applied filters so the form resets to them when they change */}
+            <PropertyFilters
+                key={filtersKey}
+                initialValues={filters}
+                onSearch={applyFilters}
+                onClear={() => applyFilters({})}
+            />
 
             {loading && !data && (
                 <div className="listings-page__status" role="status">
@@ -100,12 +138,21 @@ function ListingsPage() {
 
             {!loading && !error && data && data.results.length === 0 && (
                 <div className="listings-page__empty">
-                    <p><strong>No properties found.</strong></p>
-                    <p>
-                        {hasFilters
-                            ? "Nothing matches these filters. Try a wider price range, fewer beds or baths, or clear the filters."
-                            : "There are no properties to show right now."}
-                    </p>
+                    {pastLastPage ? (
+                        <>
+                            <p><strong>This page is past the end of the results.</strong></p>
+                            <button type="button" onClick={() => handlePageChange(1)}>Go to page 1</button>
+                        </>
+                    ) : (
+                        <>
+                            <p><strong>No properties found.</strong></p>
+                            <p>
+                                {hasFilters
+                                    ? "Nothing matches these filters. Try a wider price range, fewer beds or baths, or clear the filters."
+                                    : "There are no properties to show right now."}
+                            </p>
+                        </>
+                    )}
                 </div>
             )}
 

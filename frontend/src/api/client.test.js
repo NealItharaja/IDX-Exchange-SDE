@@ -1,4 +1,4 @@
-import { ApiError, fetchProperties, fetchPropertyDetail } from "./client";
+import { ApiError, fetchOpenHouses, fetchProperties, fetchPropertyDetail } from "./client";
 
 function jsonResponse(body, status = 200) {
     return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) };
@@ -103,5 +103,15 @@ describe("fetchPropertyDetail", () => {
         fetch.mockResolvedValue(jsonResponse({ error: "No property found with listing ID 9999999999" }, 404));
 
         await expect(fetchPropertyDetail("9999999999")).rejects.toThrow("No property found with listing ID 9999999999");
+    });
+});
+
+describe("fetchOpenHouses", () => {
+    it("requests the open houses for a listing ID", async () => {
+        const openHouses = [{ id: 1, date: "2026-10-17", allData: "{}" }];
+        fetch.mockResolvedValue(jsonResponse(openHouses));
+
+        await expect(fetchOpenHouses("1190271904")).resolves.toEqual(openHouses);
+        expect(fetch).toHaveBeenCalledWith("/api/properties/1190271904/openhouses", expect.anything());
     });
 });

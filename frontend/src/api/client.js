@@ -63,3 +63,7 @@ export function fetchProperties(params = {}, options = {}) {
 export function fetchPropertyDetail(id, options = {}) {
     return request(`/api/properties/${encodeURIComponent(id)}`, options);
 }
+
+export function fetchOpenHouses(id, options = {}) {
+    return request(`/api/properties/${encodeURIComponent(id)}/openhouses`, options);
+}

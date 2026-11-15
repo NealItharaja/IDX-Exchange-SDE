@@ -1,7 +1,20 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ListingsPage from "./ListingsPage";
+import { ROUTER_FUTURE } from "../routerFuture";
 
 let requests;
+
+function renderPage(url = "/") {
+    return render(
+        <MemoryRouter initialEntries={[url]} future={ROUTER_FUTURE}>
+            <Routes>
+                <Route path="/" element={<ListingsPage />} />
+                <Route path="/property/:id" element={<p>Detail page</p>} />
+            </Routes>
+        </MemoryRouter>,
+    );
+}
 
 function home(city, id) {
     return { id, address: `${id} ${city} Home`, city, state: "CA", zipcode: "90000", price: 500000, beds: 3, baths: "2.0", sqft: 1500, photos: "" };
@@ -49,7 +62,7 @@ afterEach(() => {
 
 describe("ListingsPage filters", () => {
     it("fetches page 1 of the filtered results when the form is submitted", async () => {
-        render(<ListingsPage />);
+        renderPage();
         await respond(allHomes, [home("Anaheim", 1)]);
 
         search("Irvine");
@@ -61,7 +74,7 @@ describe("ListingsPage filters", () => {
     });
 
     it("shows a helpful message when nothing matches", async () => {
-        render(<ListingsPage />);
+        renderPage();
         await respond(allHomes, [home("Anaheim", 1)]);
 
         search("Atlantis");
@@ -72,7 +85,7 @@ describe("ListingsPage filters", () => {
     });
 
     it("never shows stale results after Clear and a new search", async () => {
-        render(<ListingsPage />);
+        renderPage();
         await respond(allHomes, [home("Anaheim", 1)]);
 
         search("Irvine");
@@ -100,7 +113,7 @@ describe("ListingsPage pagination", () => {
     const offsetIs = (offset) => (url) => url.includes(`offset=${offset}`);
 
     async function renderIrvineResults() {
-        render(<ListingsPage />);
+        renderPage();
         await respond(allHomes, homes("Anaheim", 20), { total: 500 });
         search("Irvine");
         await respond(cityIs("Irvine"), homes("Irvine", 20), { total: 45 });
@@ -143,10 +156,32 @@ describe("ListingsPage pagination", () => {
     });
 
     it("hides pagination when everything fits on one page", async () => {
-        render(<ListingsPage />);
+        renderPage();
         await respond(allHomes, homes("Anaheim", 5), { total: 5 });
 
         expect(screen.getByText("Showing 1-5 of 5 properties")).toBeInTheDocument();
         expect(screen.queryByRole("navigation", { name: "Pagination" })).not.toBeInTheDocument();
+    });
+});
+
+describe("ListingsPage navigation", () => {
+    it("restores the filters and page from the URL (coming back from a detail page)", async () => {
+        renderPage("/?city=Irvine&page=2");
+
+        expect(fetch).toHaveBeenLastCalledWith("/api/properties?city=Irvine&limit=20&offset=20", expect.anything());
+        expect(screen.getByLabelText("City")).toHaveValue("Irvine");
+
+        await respond(cityIs("Irvine"), homes("Irvine", 20, 21), { total: 45, offset: 20 });
+        expect(screen.getByText("Showing 21-40 of 45 properties")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    });
+
+    it("clicking a property card opens its detail page", async () => {
+        renderPage();
+        await respond(allHomes, [{ ...home("Anaheim", 1), listingId: "1190271904" }]);
+
+        fireEvent.click(screen.getByText("$500,000"));
+
+        expect(screen.getByText("Detail page")).toBeInTheDocument();
     });
 });

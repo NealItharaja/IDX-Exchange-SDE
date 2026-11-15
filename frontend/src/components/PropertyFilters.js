@@ -22,8 +22,8 @@ export function removeEmptyFilters(filters) {
     return cleaned;
 }
 
-function PropertyFilters({ onSearch, onClear }) {
-    const [values, setValues] = useState(EMPTY_FILTERS);
+function PropertyFilters({ onSearch, onClear, initialValues }) {
+    const [values, setValues] = useState(() => ({ ...EMPTY_FILTERS, ...initialValues }));
     const [error, setError] = useState(null);
 
     const handleChange = (event) => {
