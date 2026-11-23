@@ -185,3 +185,83 @@ describe("ListingsPage navigation", () => {
         expect(screen.getByText("Detail page")).toBeInTheDocument();
     });
 });
+
+describe("ListingsPage sorting", () => {
+    const sortSelect = () => screen.getByLabelText("Sort by");
+
+    async function renderIrvineSortedByPrice() {
+        renderPage();
+        await respond(allHomes, homes("Anaheim", 20), { total: 500 });
+        search("Irvine");
+        await respond(cityIs("Irvine"), homes("Irvine", 20), { total: 45 });
+
+        fireEvent.change(sortSelect(), { target: { value: "price:desc" } });
+        await respond(cityIs("Irvine"), homes("Irvine", 20), { total: 45 });
+    }
+
+    it("sends sortBy and sortOrder and starts from page 1", async () => {
+        renderPage("/?city=Irvine&page=2");
+        await respond(cityIs("Irvine"), homes("Irvine", 20, 21), { total: 45, offset: 20 });
+
+        fireEvent.change(sortSelect(), { target: { value: "price:desc" } });
+
+        expect(fetch).toHaveBeenLastCalledWith(
+            "/api/properties?city=Irvine&sortBy=price&sortOrder=desc&limit=20&offset=0",
+            expect.anything(),
+        );
+        expect(sortSelect()).toHaveValue("price:desc");
+    });
+
+    it("keeps the sort when changing pages", async () => {
+        await renderIrvineSortedByPrice();
+
+        fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+
+        expect(fetch).toHaveBeenLastCalledWith(
+            "/api/properties?city=Irvine&sortBy=price&sortOrder=desc&limit=20&offset=20",
+            expect.anything(),
+        );
+        expect(sortSelect()).toHaveValue("price:desc");
+    });
+
+    it("keeps the sort when changing items per page", async () => {
+        await renderIrvineSortedByPrice();
+
+        fireEvent.change(screen.getByLabelText("Per page"), { target: { value: "50" } });
+
+        expect(fetch).toHaveBeenLastCalledWith(
+            "/api/properties?city=Irvine&sortBy=price&sortOrder=desc&limit=50&offset=0",
+            expect.anything(),
+        );
+    });
+
+    it("resets the sort when new filters are applied", async () => {
+        await renderIrvineSortedByPrice();
+
+        search("Tustin");
+
+        expect(fetch).toHaveBeenLastCalledWith("/api/properties?city=Tustin&limit=20&offset=0", expect.anything());
+        expect(sortSelect()).toHaveValue("");
+    });
+
+    it("resets the sort when filters are cleared", async () => {
+        await renderIrvineSortedByPrice();
+
+        fireEvent.click(screen.getByRole("button", { name: "Clear Filters" }));
+
+        expect(fetch).toHaveBeenLastCalledWith("/api/properties?limit=20&offset=0", expect.anything());
+        expect(sortSelect()).toHaveValue("");
+    });
+
+    it("restores the sort from the URL", () => {
+        renderPage("/?sortBy=listDate&sortOrder=desc");
+        expect(fetch).toHaveBeenLastCalledWith("/api/properties?sortBy=listDate&sortOrder=desc&limit=20&offset=0", expect.anything());
+        expect(sortSelect()).toHaveValue("listDate:desc");
+    });
+
+    it("falls back to the default order for a hand-edited sort in the URL", () => {
+        renderPage("/?sortBy=id&sortOrder=desc");
+        expect(fetch).toHaveBeenLastCalledWith("/api/properties?limit=20&offset=0", expect.anything());
+        expect(sortSelect()).toHaveValue("");
+    });
+});

@@ -28,13 +28,26 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
     year: "numeric",
 });
 
-// "2026-10-17" -> "Saturday, October 17, 2026"
-export function formatDate(value) {
+const shortDateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+function toLocalDate(value) {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ""));
     if (!match) return null;
 
     const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-    return Number.isNaN(date.getTime()) ? null : dateFormatter.format(date);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// "2026-10-17" -> "Saturday, October 17, 2026"
+export function formatDate(value) {
+    const date = toLocalDate(value);
+    return date ? dateFormatter.format(date) : null;
+}
+
+// "2026-10-17" -> "Oct 17, 2026"
+export function formatShortDate(value) {
+    const date = toLocalDate(value);
+    return date ? shortDateFormatter.format(date) : null;
 }
 
 // "13:00:00" -> "1:00 PM"

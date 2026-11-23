@@ -2,7 +2,7 @@ const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const app = require("../server");
 const pool = require("../db/pool");
-const { parsePropertyQuery, buildWhereClause } = require("../utils/propertyQuery");
+const { parsePropertyQuery, buildWhereClause, buildOrderBy } = require("../utils/propertyQuery");
 
 let server;
 let baseUrl;
@@ -50,8 +50,13 @@ describe("buildWhereClause", () => {
 });
 
 describe("parsePropertyQuery", () => {
-    it("defaults to limit 20 and offset 0", () => {
-        assert.deepEqual(parsePropertyQuery({}), { filters: {}, limit: 20, offset: 0 });
+    it("defaults to limit 20, offset 0 and no sort", () => {
+        assert.deepEqual(parsePropertyQuery({}), { filters: {}, sort: null, limit: 20, offset: 0 });
+    });
+
+    it("parses sortBy and sortOrder (order defaults to asc)", () => {
+        assert.deepEqual(parsePropertyQuery({ sortBy: "price", sortOrder: "DESC" }).sort, { sortBy: "price", sortOrder: "desc" });
+        assert.deepEqual(parsePropertyQuery({ sortBy: "listDate" }).sort, { sortBy: "listDate", sortOrder: "asc" });
     });
 
     const invalid = [
@@ -67,6 +72,12 @@ describe("parsePropertyQuery", () => {
         ["minPrice > maxPrice", { minPrice: "900000", maxPrice: "100000" }],
         ["unknown param", { bedrooms: "3" }],
         ["repeated param", { city: ["Irvine", "Tustin"] }],
+        ["sortBy=ListPrice (RESO name)", { sortBy: "ListPrice" }],
+        ["sortBy=L_SystemPrice (raw column)", { sortBy: "L_SystemPrice" }],
+        ["sortBy with SQL in it", { sortBy: "price; DROP TABLE rets_property" }],
+        ["sortBy=toString (inherited property)", { sortBy: "toString" }],
+        ["sortOrder=sideways", { sortBy: "price", sortOrder: "sideways" }],
+        ["sortOrder without sortBy", { sortOrder: "desc" }],
     ];
 
     for (const [label, query] of invalid) {
@@ -75,6 +86,22 @@ describe("parsePropertyQuery", () => {
             assert.ok(errors && errors.length > 0);
         });
     }
+});
+
+describe("buildOrderBy", () => {
+    it("keeps the original id order when no sort is given", () => {
+        assert.equal(buildOrderBy(null), "ORDER BY id");
+    });
+
+    it("uses the real rets_property column with id as a same-direction tiebreaker", () => {
+        assert.equal(buildOrderBy({ sortBy: "price", sortOrder: "desc" }), "ORDER BY L_SystemPrice DESC, id DESC");
+        assert.equal(buildOrderBy({ sortBy: "listDate", sortOrder: "asc" }), "ORDER BY ListingContractDate ASC, id ASC");
+    });
+
+    it("puts missing values last for columns that can be NULL", () => {
+        assert.equal(buildOrderBy({ sortBy: "sqft", sortOrder: "asc" }), "ORDER BY LM_Int2_3 IS NULL, LM_Int2_3 ASC, id ASC");
+        assert.equal(buildOrderBy({ sortBy: "sqft", sortOrder: "desc" }), "ORDER BY LM_Int2_3 DESC, id DESC");
+    });
 });
 
 describe("GET /api/properties", () => {
@@ -158,4 +185,88 @@ describe("GET /api/properties", () => {
         assert.equal(status, 200);
         assert.equal(body.total, 0);
     });
+});
+
+describe("GET /api/properties sorting", () => {
+    function assertSorted(values, order) {
+        for (let i = 1; i < values.length; i++) {
+            const ok = order === "asc" ? values[i - 1] <= values[i] : values[i - 1] >= values[i];
+            assert.ok(ok, `not ${order} at index ${i}: ${values[i - 1]} then ${values[i]}`);
+        }
+    }
+
+    it("sorts by price low to high", async () => {
+        const { status, body } = await getProperties("?sortBy=price&sortOrder=asc&limit=100");
+        assert.equal(status, 200);
+        assertSorted(body.results.map((p) => p.price), "asc");
+
+        const [[cheapest]] = await pool.execute("SELECT MIN(L_SystemPrice) AS price FROM rets_property");
+        assert.equal(body.results[0].price, cheapest.price);
+    });
+
+    it("sorts by price high to low", async () => {
+        const { body } = await getProperties("?sortBy=price&sortOrder=desc&limit=100");
+        assertSorted(body.results.map((p) => p.price), "desc");
+
+        const [[priciest]] = await pool.execute("SELECT MAX(L_SystemPrice) AS price FROM rets_property");
+        assert.equal(body.results[0].price, priciest.price);
+    });
+
+    it("sorts by date listed, newest first", async () => {
+        const { status, body } = await getProperties("?sortBy=listDate&sortOrder=desc&limit=100");
+        assert.equal(status, 200);
+        assertSorted(body.results.map((p) => p.listedDate), "desc");
+
+        const [[newest]] = await pool.execute(
+            "SELECT DATE_FORMAT(MAX(ListingContractDate), '%Y-%m-%d') AS listedDate FROM rets_property",
+        );
+        assert.equal(body.results[0].listedDate, newest.listedDate);
+    });
+
+    it("sorts within the filtered results", async () => {
+        const { body } = await getProperties("?city=Irvine&beds=3&sortBy=price&sortOrder=desc&limit=100");
+        assert.ok(body.total > 0);
+        assertSorted(body.results.map((p) => p.price), "desc");
+        for (const property of body.results) {
+            assert.equal(property.city.trim().toLowerCase(), "irvine");
+            assert.ok(property.beds >= 3);
+        }
+    });
+
+    it("keeps the sort across pages with no overlap or gaps", async () => {
+        const first60 = await getProperties("?sortBy=price&sortOrder=asc&limit=60");
+        const page2 = await getProperties("?sortBy=price&sortOrder=asc&limit=20&offset=20");
+        const page3 = await getProperties("?sortBy=price&sortOrder=asc&limit=20&offset=40");
+
+        assert.deepEqual(
+            [...page2.body.results, ...page3.body.results].map((p) => p.id),
+            first60.body.results.slice(20, 60).map((p) => p.id),
+        );
+    });
+
+    it("puts properties with no sqft at the end, even when sorting smallest first", async () => {
+        const { body: smallest } = await getProperties("?sortBy=sqft&sortOrder=asc&limit=5");
+        assert.ok(smallest.results.every((p) => p.sqft !== null));
+
+        const { body: all } = await getProperties("?sortBy=sqft&sortOrder=asc&limit=1");
+        const { body: last } = await getProperties(`?sortBy=sqft&sortOrder=asc&limit=1&offset=${all.total - 1}`);
+        assert.equal(last.results[0].sqft, null);
+    });
+
+    it("puts properties with no sqft at the end when sorting largest first too", async () => {
+        const { body: largest } = await getProperties("?sortBy=sqft&sortOrder=desc&limit=5");
+        assert.ok(largest.results.every((p) => p.sqft !== null));
+
+        const { body: last } = await getProperties(`?sortBy=sqft&sortOrder=desc&limit=1&offset=${largest.total - 1}`);
+        assert.equal(last.results[0].sqft, null);
+    });
+
+    for (const query of ["?sortBy=ListPrice", "?sortBy=L_SystemPrice", "?sortBy=price&sortOrder=up", "?sortOrder=desc", "?sortBy=id%20DESC"]) {
+        it(`returns 400 for ${query}`, async () => {
+            const { status, body } = await getProperties(query);
+            assert.equal(status, 400);
+            assert.equal(body.error, "Invalid query parameters");
+            assert.match(body.details.join(" "), /sort/);
+        });
+    }
 });

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import PropertyImageCarousel from "./PropertyImageCarousel";
-import { formatNumber, formatPrice } from "../utils/format";
+import { formatNumber, formatPrice, formatShortDate } from "../utils/format";
 import "./PropertyCard.css";
 
 function PropertyCard({ property }) {
@@ -9,6 +9,7 @@ function PropertyCard({ property }) {
     const location = [property.city, [property.state, property.zipcode].filter(Boolean).join(" ")]
         .filter(Boolean)
         .join(", ");
+    const listedDate = formatShortDate(property.listedDate);
 
     // The whole card is clickable
     const handleClick = (event) => {
@@ -33,6 +34,7 @@ function PropertyCard({ property }) {
                     <li><strong>{formatNumber(property.baths)}</strong> ba</li>
                     <li><strong>{formatNumber(property.sqft)}</strong> sqft</li>
                 </ul>
+                {listedDate && <p className="property-card__listed">Listed {listedDate}</p>}
             </div>
         </article>
     );

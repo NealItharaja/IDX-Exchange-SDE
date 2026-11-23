@@ -10,6 +10,17 @@ const PER_PAGE_OPTIONS = [10, 20, 50];
 const DEFAULT_PER_PAGE = 20;
 const FILTER_KEYS = Object.keys(EMPTY_FILTERS);
 
+export const SORT_OPTIONS = [
+    { value: "", label: "Default" },
+    { value: "listDate:desc", label: "Newest listed" },
+    { value: "listDate:asc", label: "Oldest listed" },
+    { value: "price:asc", label: "Price: low to high" },
+    { value: "price:desc", label: "Price: high to low" },
+    { value: "sqft:desc", label: "Size: largest first" },
+    { value: "sqft:asc", label: "Size: smallest first" },
+    { value: "beds:desc", label: "Beds: most first" },
+];
+
 function readFilters(searchParams) {
     return removeEmptyFilters(Object.fromEntries(FILTER_KEYS.map((key) => [key, searchParams.get(key)])));
 }
@@ -24,12 +35,18 @@ function readPerPage(searchParams) {
     return PER_PAGE_OPTIONS.includes(perPage) ? perPage : DEFAULT_PER_PAGE;
 }
 
+function readSort(searchParams) {
+    const sort = `${searchParams.get("sortBy") ?? ""}:${searchParams.get("sortOrder") ?? ""}`;
+    return SORT_OPTIONS.some((option) => option.value === sort) ? sort : "";
+}
+
 function ListingsPage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const filters = readFilters(searchParams);
     const filtersKey = new URLSearchParams(filters).toString();
     const currentPage = readPage(searchParams);
     const itemsPerPage = readPerPage(searchParams);
+    const sort = readSort(searchParams);
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -41,8 +58,11 @@ function ListingsPage() {
         setLoading(true);
         setError(null);
 
+        const [sortBy, sortOrder] = sort ? sort.split(":") : [];
         const params = {
             ...Object.fromEntries(new URLSearchParams(filtersKey)),
+            sortBy,
+            sortOrder,
             limit: itemsPerPage,
             offset: (currentPage - 1) * itemsPerPage,
         };
@@ -59,20 +79,31 @@ function ListingsPage() {
             });
 
         return () => controller.abort();
-    }, [filtersKey, currentPage, itemsPerPage, reloadKey]);
+    }, [filtersKey, sort, currentPage, itemsPerPage, reloadKey]);
 
-    const buildQuery = ({ nextFilters = filters, page = 1, perPage = itemsPerPage }) => {
+    const buildQuery = ({ nextFilters = filters, nextSort = sort, page = 1, perPage = itemsPerPage }) => {
         const next = new URLSearchParams(nextFilters);
+        if (nextSort) {
+            const [sortBy, sortOrder] = nextSort.split(":");
+            next.set("sortBy", sortBy);
+            next.set("sortOrder", sortOrder);
+        }
         if (page > 1) next.set("page", String(page));
         if (perPage !== DEFAULT_PER_PAGE) next.set("perPage", String(perPage));
         return next;
     };
 
     const updateQuery = (changes) => setSearchParams(buildQuery(changes));
+
+    // New filters reset to page 1 and the default sort.
     const applyFilters = (nextFilters) => {
-        const next = buildQuery({ nextFilters });
+        const next = buildQuery({ nextFilters, nextSort: "" });
         if (next.toString() === searchParams.toString()) setReloadKey((key) => key + 1);
         else setSearchParams(next);
+    };
+
+    const handleSortChange = (event) => {
+        updateQuery({ nextSort: event.target.value });
     };
 
     const handlePageChange = (page) => {
@@ -101,6 +132,14 @@ function ListingsPage() {
                             {data.total.toLocaleString()} properties
                         </p>
                     )}
+                    <label className="listings-page__per-page">
+                        Sort by
+                        <select value={sort} onChange={handleSortChange}>
+                            {SORT_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                    </label>
                     <label className="listings-page__per-page">
                         Per page
                         <select value={itemsPerPage} onChange={handleItemsPerPageChange}>

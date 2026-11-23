@@ -1,7 +1,15 @@
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
-const ALLOWED_PARAMS = ["city", "zipcode", "minPrice", "maxPrice", "beds", "baths", "limit", "offset"];
+const ALLOWED_PARAMS = ["city", "zipcode", "minPrice", "maxPrice", "beds", "baths", "sortBy", "sortOrder", "limit", "offset"];
 
+const SORT_COLUMNS = {
+    price: { column: "L_SystemPrice", nullable: false },
+    listDate: { column: "ListingContractDate", nullable: false },
+    sqft: { column: "LM_Int2_3", nullable: true },
+    beds: { column: "L_Keyword2", nullable: true },
+};
+
+const SORT_ORDERS = ["asc", "desc"];
 const INTEGER = /^\d+$/;
 const DECIMAL = /^\d+(\.\d+)?$/;
 const ZIPCODE = /^\d{5}$/;
@@ -25,7 +33,8 @@ const RESULT_COLUMNS = `
     LMD_MP_Latitude AS latitude,
     LMD_MP_Longitude AS longitude,
     PhotoCount AS photoCount,
-    L_Photos AS photos
+    L_Photos AS photos,
+    DATE_FORMAT(ListingContractDate, '%Y-%m-%d') AS listedDate
 `;
 
 function parseInteger(errors, name, raw, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
@@ -86,11 +95,40 @@ function parsePropertyQuery(query) {
         errors.push("minPrice cannot be greater than maxPrice");
     }
 
+    const sort = parseSort(errors, query.sortBy, query.sortOrder);
     const limit = query.limit === undefined ? DEFAULT_LIMIT : parseInteger(errors, "limit", query.limit, { min: 1, max: MAX_LIMIT });
     const offset = query.offset === undefined ? 0 : parseInteger(errors, "offset", query.offset);
 
     if (errors.length > 0) return { errors };
-    return { filters, limit, offset };
+    return { filters, sort, limit, offset };
+}
+
+// Returns null when no sort was asked for, otherwise { sortBy, sortOrder }.
+function parseSort(errors, sortBy, sortOrder) {
+    if (sortBy === undefined) {
+        if (sortOrder !== undefined) errors.push("sortOrder can only be used together with sortBy");
+        return null;
+    }
+    if (!Object.hasOwn(SORT_COLUMNS, sortBy)) {
+        errors.push(`sortBy must be one of: ${Object.keys(SORT_COLUMNS).join(", ")} (got "${sortBy.slice(0, 50)}")`);
+        return null;
+    }
+
+    const order = sortOrder === undefined ? "asc" : sortOrder.toLowerCase();
+    if (!SORT_ORDERS.includes(order)) {
+        errors.push(`sortOrder must be asc or desc (got "${sortOrder.slice(0, 50)}")`);
+        return null;
+    }
+    return { sortBy, sortOrder: order };
+}
+
+function buildOrderBy(sort) {
+    if (!sort) return "ORDER BY id";
+
+    const { column, nullable } = SORT_COLUMNS[sort.sortBy];
+    const direction = sort.sortOrder === "desc" ? "DESC" : "ASC";
+    const nullsLast = nullable && direction === "ASC" ? `${column} IS NULL, ` : "";
+    return `ORDER BY ${nullsLast}${column} ${direction}, id ${direction}`;
 }
 
 // Each condition is pushed together with its value so the ? placeholders and the values array can never get out of order.
@@ -135,7 +173,7 @@ function parseListingId(raw) {
     return { listingId: raw };
 }
 
-function buildPropertyQueries({ filters, limit, offset }) {
+function buildPropertyQueries({ filters, sort = null, limit, offset }) {
     const { where, values } = buildWhereClause(filters);
 
     return {
@@ -144,7 +182,7 @@ function buildPropertyQueries({ filters, limit, offset }) {
             values,
         },
         results: {
-            sql: `SELECT ${RESULT_COLUMNS} FROM rets_property ${where} ORDER BY id LIMIT ? OFFSET ?`,
+            sql: `SELECT ${RESULT_COLUMNS} FROM rets_property ${where} ${buildOrderBy(sort)} LIMIT ? OFFSET ?`,
             // mysql2 prepared statements need LIMIT/OFFSET sent as strings on MySQL 8.0.22+
             values: [...values, String(limit), String(offset)],
         },
@@ -154,8 +192,10 @@ function buildPropertyQueries({ filters, limit, offset }) {
 module.exports = {
     DEFAULT_LIMIT,
     MAX_LIMIT,
+    SORT_COLUMNS,
     parsePropertyQuery,
     parseListingId,
     buildWhereClause,
+    buildOrderBy,
     buildPropertyQueries,
 };

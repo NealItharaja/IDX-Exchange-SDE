@@ -78,3 +78,9 @@
 .property-card__stats strong {
     color: #101828;
 }
+
+.property-card__listed {
+    margin-top: 8px !important;
+    color: #667085;
+    font-size: 0.8rem;
+}
